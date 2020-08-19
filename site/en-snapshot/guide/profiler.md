@@ -17,6 +17,9 @@ and some recommended best practices to optimize model performance.
 If you want to profile your model performance on Cloud TPUs, refer to the
 [Cloud TPU guide](https://cloud.google.com/tpu/docs/cloud-tpu-tools#capture_profile).
 
+Note: You cannot use the Profiler to get profiles for the
+`tf.data.experimental.service` available with `tf.data`.
+
 ## Install the Profiler and GPU prerequisites
 
 Install the Profiler by downloading and running the
@@ -47,12 +50,15 @@ export LD_LIBRARY_PATH=/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
 Run the `ldconfig` command above again to verify that the CUPTI library is
 found.
 
-### Profile multiple GPUs {: id = 'profile_multiple_gpus'}
+<a name="profile_multiple_gpus"></a>
 
-TensorFlow does not officially support multiple GPU profiling yet. You can
-install CUDA® Toolkit 10.2 or later to profile multiple GPUs. As TensorFlow
-supports CUDA® Toolkit versions only up to 10.1 , create symbolic links to
-`libcudart.so.10.1` and `libcupti.so.10.1`.
+### Profile multiple GPUs
+
+TensorFlow currently supports multiple GPU profiling only for single host
+systems. Multiple GPU profiling for multi-host systems is currently not
+supported. Install CUDA® Toolkit 10.2 or later to profile multiple GPUs. As
+TensorFlow supports CUDA® Toolkit versions only up to 10.1 , create symbolic
+links to `libcudart.so.10.1` and `libcupti.so.10.1`.
 
 ```shell
 sudo ln -s /usr/local/cuda/lib64/libcudart.so.10.2 /usr/local/cuda/lib64/libcudart.so.10.1
@@ -62,17 +68,42 @@ sudo ln -s /usr/local/cuda/extras/CUPTI/lib64/libcupti.so.10.2 /usr/local/cuda/e
 To profile multi-worker GPU configurations, profile individual workers
 independently.
 
+### Resolve privilege issues
+
+When you run profiling with CUDA® Toolkit 10.1 in a Docker environment or on
+Linux, you may encounter issues related to insufficient CUPTI privileges
+(`CUPTI_ERROR_INSUFFICIENT_PRIVILEGES`). See the
+[NVIDIA Developer Docs](https://developer.nvidia.com/nvidia-development-tools-solutions-ERR_NVGPUCTRPERM-permission-issue-performance-counters){:.external}
+to learn more about how you can resolve these issues on Linux.
+
+To resolve CUPTI privilege issues in a Docker environment, run
+
+```shell
+docker run option '--privileged=true'
+```
+
+<a name="profiler_tools"></a>
+
 ## Profiler tools
 
 Access the Profiler from the **Profile** tab in TensorBoard which appears only
-after you have captured some model data. The Profiler has a selection of tools
-to help with performance analysis:
+after you have captured some model data.
+
+Note: The Profiler requires internet access to load the
+[Google Chart libraries](https://developers.google.com/chart/interactive/docs/basic_load_libs#basic-library-loading).
+Some charts and tables may be missing if you run TensorBoard entirely offline on
+your local machine, behind a corporate firewall, or in a data center.
+
+The Profiler has a selection of tools to help with performance analysis:
 
 -   Overview page
 -   Input pipeline analyzer
 -   TensorFlow stats
 -   Trace viewer
 -   GPU kernel stats
+-   Memory profile tool
+
+<a name="overview_page"></a>
 
 ### Overview page
 
@@ -126,6 +157,8 @@ The overview page displays data as follows:
 *   **Recommendation for next steps -** Reports when a model is input bound and
     recommends tools you can use to locate and resolve model performance
     bottlenecks
+
+<a name="input_pipeline_analyzer"></a>
 
 ### Input pipeline analyzer
 
@@ -198,7 +231,7 @@ The host-side analysis reports a breakdown of the input processing time (the
 time spent on `tf.data` API ops) on the host into several categories:
 
 -   **Reading data from files on demand -** Time spent on reading data from
-    files without caching, prefetching, and interleaving.
+    files without caching, prefetching, and interleaving
 -   **Reading data from files in advance -** Time spent reading files, including
     caching, prefetching, and interleaving
 -   **Data preprocessing -** Time spent on preprocessing ops, such as image
@@ -227,6 +260,8 @@ information:
 1.  **Total Self Time %**. Shows the total self time as a fraction of the total
     time spent on input processing
 1.  **Category**. Shows the processing category of the input op
+
+<a name="tf_stats"></a>
 
 ### TensorFlow stats
 
@@ -275,6 +310,8 @@ The tool displays performance information in two panes:
 
 You can choose to include or exclude Idle time in the pie charts and table.
 
+<a name="trace_viewer"></a>
+
 ### Trace viewer
 
 The trace viewer displays a timeline that shows:
@@ -284,12 +321,11 @@ The trace viewer displays a timeline that shows:
     host executes input operations, preprocesses training data and transfers it
     to the device, while the device executes the actual model training
 
-Trace viewer allows you to identify performance problems in your model, then
+The trace viewer allows you to identify performance problems in your model, then
 take steps to resolve them. For example, at a high level, you can identify
 whether input or model training is taking the majority of the time. Drilling
-down, you can identify which ops take the longest to execute.
-
-Note that trace viewer is limited to 1 million events per device.
+down, you can identify which ops take the longest to execute. Note that the
+trace viewer is limited to 1 million events per device.
 
 #### Trace viewer interface
 
@@ -314,7 +350,7 @@ The Timeline pane contains the following elements:
 1.  **Tool selector -** Contains various tools for interacting with the trace
     viewer such as Zoom, Pan, Select, and Timing. Use the Timing tool to mark a
     time interval.
-1.  **Events -** These show the time during which a op was executed or the
+1.  **Events -** These show the time during which an op was executed or the
     duration of meta-events, such as training steps
 
 ##### Sections and tracks
@@ -332,13 +368,24 @@ The trace viewer contains the following sections:
         TensorFlow op is translated into one or several XLA ops. The XLA
         compiler translates the XLA ops into code that runs on the device).
 -   **One section for threads running on the host machine's CPU,** labeled
-    **"Host Threads"**. The section contains one track for each CPU thread.
-    Note: You can ignore the information displayed alongside the section labels
+    **"Host Threads"**. The section contains one track for each CPU thread. Note
+    that you can ignore the information displayed alongside the section labels.
 
 ##### Events
 
 Events within the timeline are displayed in different colors; the colors
 themselves have no specific meaning.
+
+The trace viewer can also display traces of Python function calls in your
+TensorFlow program. If you use the `tf.profiler.experimental.start()` API, you
+can enable Python tracing by using the `ProfilerOptions` namedtuple when
+starting profiling. Alternatively, if you use the sampling mode for profiling,
+you can select the level of tracing by using the dropdown options in the
+**Capture Profile** dialog.
+
+![image](./images/tf_profiler/python_tracer.png)
+
+<a name="gpu_kernel_stats"></a>
 
 ### GPU kernel stats
 
@@ -371,11 +418,122 @@ The tool displays information in two panes:
     *   The minimum elapsed GPU time in microseconds
     *   The maximum elapsed GPU time in microseconds
 
+<a name="memory_profile_tool"></a>
+
+### Memory profile tool {: id = 'memory_profile_tool'}
+
+The Memory Profile tool monitors the memory usage of your host or device during
+the profiling interval. You can use this tool to:
+
+*   Debug out of memory (OOM) issues by pinpointing peak memory usage and the
+    corresponding memory allocation to TensorFlow ops. You can also debug OOM
+    issues that may arise when you run
+    [multi-tenancy](https://arxiv.org/pdf/1901.06887.pdf) inference
+*   Debug memory fragmentation issues
+
+The memory profile tool displays data in three sections:
+
+1.  Memory Profile Summary
+1.  Memory Timeline Graph
+1.  Memory Breakdown Table
+
+#### Memory profile summary
+
+This section displays a high-level summary of the memory profile of your
+TensorFlow program as shown below:
+
+<img src="./images/tf_profiler/memory_profile_summary.png" width="400", height="450">
+
+The memory profile summary has six fields:
+
+1.  Memory ID - Dropdown which lists all available memory systems (host and
+    device). Select the memory system you want to view from the dropdown. Note
+    that the host is listed as `gpu_host_bfc`
+1.  #Allocation - The number of memory allocations made during the profiling
+    interval
+1.  #Deallocation - The number of memory deallocations in the profiling interval
+1.  Memory Capacity - The total capacity (in GiBs) of the memory system that you
+    select
+1.  Peak Heap Usage - The peak memory usage (in GiBs) since the model started
+    running
+1.  Peak Memory Usage - The peak memory usage (in GiBs) in the profiling
+    interval. This field contains the following sub-fields:
+    1.  Timestamp - The timestamp of when the peak memory usage occurred on the
+        Timeline Graph
+    1.  Stack Reservation - Amount of memory reserved on the stack (in GiBs)
+    1.  Heap Allocation - Amount of memory allocated on the heap (in GiBs)
+    1.  Free Memory - Amount of free memory (in GiBs). The Memory Capacity is
+        the sum total of the Stack Reservation, Heap Allocation, and Free Memory
+    1.  Fragmentation - The percentage of fragmentation (lower is better). It is
+        calculated as a percentage of (1 - Size of the largest chunk of free
+        memory / Total free memory)
+
+#### Memory timeline graph
+
+This section displays a plot of the memory usage (in GiBs) and the percentage of
+fragmentation versus time (in ms).
+
+![image](./images/tf_profiler/memory_timeline_graph.png)
+
+The X-axis represents the timeline (in ms) of the profiling interval. The Y-axis
+on the left represents the memory usage (in GiBs) and the Y-axis on the right
+represents the percentage of fragmentation. At each point in time on the X-axis,
+the total memory is broken down into three categories: stack (in red), heap (in
+orange), and free (in green). Hover over a specific timestamp to view the
+details about the memory allocation/deallocation events at that point like
+below:
+
+![image](./images/tf_profiler/memory_timeline_graph_popup.png)
+
+The pop-up window displays the following information:
+
+*   timestamp(ms) - The location of the selected event on the timeline
+*   event - The type of event (allocation or deallocation)
+*   requested_size(GiBs) - The amount of memory requested. This will be a
+    negative number for deallocation events
+*   allocation_size(GiBs) - The actual amount of memory allocated. This will be
+    a negative number for deallocation events
+*   tf_op - The TensorFlow Op that requests the allocation/deallocation
+*   step_id - The training step in which this event occurred
+*   region_type - The data entity type that this allocated memory is for.
+    Possible values are `temp` for temporaries, `output` for activations and
+    gradients, and `persist`/`dynamic` for weights and constants
+*   data_type - The tensor element type (e.g., uint8 for 8-bit unsigned integer)
+*   tensor_shape - The shape of the tensor being allocated/deallocated
+*   memory_in_use(GiBs) - The total memory that is in use at this point of time
+
+#### Memory breakdown table
+
+This table shows the active memory allocations at the point of peak memory usage
+in the profiling interval.
+
+![image](./images/tf_profiler/memory_breakdown_table.png)
+
+There is one row for each TensorFlow Op and each row has the following columns:
+
+*   Op Name - The name of the TensorFlow op
+*   Allocation Size (GiBs) - The total amount of memory allocated to this op
+*   Requested Size (GiBs) - The total amount of memory requested for this op
+*   Occurrences - The number of allocations for this op
+*   Region type - The data entity type that this allocated memory is for.
+    Possible values are `temp` for temporaries, `output` for activations and
+    gradients, and `persist`/`dynamic` for weights and constants
+*   Data type - The tensor element type
+*   Shape - The shape of the allocated tensors
+
+Note: You can sort any column in the table and also filter rows by op name.
+
+<a name="collect_performance_data"></a>
+
 ## Collect performance data
 
 The TensorFlow Profiler collects host activities and GPU traces of your
 TensorFlow model. You can configure the Profiler to collect performance data
 through either the programmatic mode or the sampling mode.
+
+### Profiling APIs
+
+You can use the following APIs to perform profiling.
 
 *   Programmatic mode using the TensorBoard Keras Callback
     (`tf.keras.callbacks.TensorBoard`)
@@ -428,11 +586,82 @@ first few batches to avoid inaccuracies due to initialization overhead.
     # ... TensorFlow program ...
     ```
 
-![image](./images/tf_profiler/capture_profile.png)
+<img src="./images/tf_profiler/capture_profile.png" width="400", height="450">
 
-You can specify the Profile Service URL or TPU name, the profiling duration, and
-how many times you want the Profiler to retry capturing profiles if unsuccessful
-at first.
+Use the **Capture Profile** dialog to specify:
+
+*   The profile Service URL or TPU name
+*   The profiling duration
+*   The level of device, host, and Python function call tracing
+*   How many times you want the Profiler to retry capturing profiles if
+    unsuccessful at first
+
+### Profiling custom training loops
+
+To profile custom training loops in your TensorFlow code, instrument the
+training loop with the `tf.profiler.experimental.Trace` API to mark the step
+boundaries for the Profiler. The `name` argument is used as a prefix for the
+step names, the `step_num` keyword argument is appended in the step names, and
+the `_r` keyword argument makes this trace event get processed as a step event
+by the Profiler.
+
+As an example,
+
+```python
+for step in range(NUM_STEPS):
+    with tf.profiler.experimental.Trace('train', step_num=step, _r=1):
+        train_data = next(dataset)
+        train_step(train_data)
+```
+
+This will enable the Profiler's step-based performance analysis and cause the
+step events to show up in the trace viewer.
+
+Ensure that you include the dataset iterator within the
+`tf.profiler.experimental.Trace` context for accurate analysis of the input
+pipeline.
+
+The code snippet below is an anti-pattern:
+
+Warning: This will result in inaccurate analysis of the input pipeline.
+
+```python
+for step, train_data in enumerate(dataset):
+    with tf.profiler.experimental.Trace('train', step_num=step, _r=1):
+        train_step(train_data)
+```
+
+### Profiling use cases
+
+The profiler covers a number of use cases along four different axes. Some of the
+combinations are currently supported and others will be added in the future.
+Some of the use cases are:
+
+*   Local vs. Remote profiling: These are two common ways of setting up your
+    profiling environment. In local profiling, the profiling API is called on
+    the same machine your model is executing, for example, a local workstation
+    with GPUs. In remote profiling, the profiling API is called on a different
+    machine from where your model is executing, for example, on a Cloud TPU.
+*   Profiling multiple workers: You can profile multiple machines when using the
+    distributed training capabilities of TensorFlow.
+*   Hardware platform: Profile CPUs, GPUs, and TPUs.
+
+The table below is a quick overview of which of the above use cases are
+supported by the various profiling APIs in TensorFlow 2.3:
+
+| Profiling API                | Local     | Remote    | Multiple  | Hardware  |
+:                              :           :           : workers   : Platforms :
+| :--------------------------- | :-------- | :-------- | :-------- | :-------- |
+| **TensorBoard Keras          | Supported | Not       | Not       | CPU, GPU  |
+: Callback**                   :           : Supported : Supported :           :
+| **`tf.experimental.profiler` | Supported | Not       | Not       | CPU, GPU  |
+: Function API**               :           : Supported : Supported :           :
+| **Context manager API**      | Supported | Not       | Not       | CPU, GPU  |
+:                              :           : supported : Supported :           :
+| **On demand API**            | Not       | Supported | Limited   | CPU, GPU, |
+:                              : supported :           : Support   : TPU       :
+
+<a name="performance_best_practices"></a>
 
 ## Best practices for optimal model performance
 

@@ -1,3 +1,5 @@
+# Pass/fail checks for continuous integration testing.
+# Webhook events: Pull requests
 name: CI
 on:
   pull_request:
@@ -6,7 +8,7 @@ on:
     - "!site/en-snapshot/**"
 
 jobs:
-  notebook_format:
+  nbfmt:
     name: Notebook format
     runs-on: ubuntu-latest
     steps:
@@ -19,15 +21,15 @@ jobs:
     - name: Check notebook formatting
       run: |
         # Only check notebooks modified in this pull request.
-        notebooks="$(git diff --name-only master | grep '\.ipynb$' || true)"
-        if [[ -n "$notebooks" ]]; then
-          echo "Check formatting with nbfmt:"
-          python3 -m tensorflow_docs.tools.nbfmt --test $notebooks
-        else
+        readarray -t changed_notebooks < <(git diff --name-only master | grep '\.ipynb$' || true)
+        if [[ ${#changed_notebooks[@]} == 0 ]]; then
           echo "No notebooks modified in this pull request."
+          exit 0
         fi
+        echo "Check formatting with nbfmt:"
+        python3 -m tensorflow_docs.tools.nbfmt --test "${changed_notebooks[@]}"
 
-  notebook_lint:
+  nblint:
     name: Notebook lint
     runs-on: ubuntu-latest
     steps:
@@ -39,13 +41,44 @@ jobs:
       run: python3 -m pip install -U git+https://github.com/tensorflow/docs
     - name: Lint notebooks
       run: |
-        # Only check notebooks modified in this pull request.
-        notebooks="$(git diff --name-only master | grep '\.ipynb$' | grep -v 'en-snapshot' || true)"
-        if [[ -n "$notebooks" ]]; then
-          echo "Lint check with nblint:"
-          python3 -m tensorflow_docs.tools.nblint \
-            --styles=tensorflow,tensorflow_docs_l10n \
-            --arg=repo:tensorflow/docs-l10n $notebooks
-        else
+        # Only check notebooks modified in this pull request. (Ignore en-snapshot)
+        readarray -t changed_notebooks < <(git diff --name-only master | grep '\.ipynb$' | grep -v 'en-snapshot' || true)
+        if [[ ${#changed_notebooks[@]} == 0 ]]; then
           echo "No notebooks modified in this pull request."
+          exit 0
+        fi
+        echo "Lint check with nblint:"
+        python3 -m tensorflow_docs.tools.nblint \
+          --styles=tensorflow,tensorflow_docs_l10n \
+          --arg=repo:tensorflow/docs-l10n "${changed_notebooks[@]}"
+
+  sot-check:
+    name: Source doc check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Fetch master branch
+      run: git fetch -u origin master:master
+    - name: Check for source doc
+      run: |
+        # Only check translations modified in this pull request.
+        readarray -t changed_files < <(git diff --name-only master \
+          | grep 'site/' | grep -v 'en-snapshot' | grep -v 'REVIEWERS' | grep -v 'README' || true)
+        if [[ ${#changed_files[@]} == 0 ]]; then
+          echo "No docs modified in this pull request."
+          exit 0
+        fi
+        # Check that each file has a counterpart in the site/en-snapshot directory.
+        declare -a orphan_files
+        for fp in "${changed_files[@]}"; do
+          # Get file path relative to translation root.
+          rel_fp="${fp#site/*/}"
+          if [[ ! -f "site/en-snapshot/$rel_fp" ]]; then
+            orphan_files+=("$fp")
+          fi
+        done
+        if [[ ${#orphan_files[@]} != 0 ]]; then
+          echo "No source counterpart in site/en-snapshot for the following files:"
+          printf -- "- %s\n" "${orphan_files[@]}"
+          exit 1
         fi

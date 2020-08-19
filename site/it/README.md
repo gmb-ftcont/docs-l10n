@@ -21,22 +21,37 @@ To volunteer to write or review community translations, contact the
 Alcune parole fanno parte di un vocabolario tecnico inglese e pertanto non hanno una traduzione naturale. Per favore *non* traducete le seguenti parole:
 
 *   account(s)
+*   audience
+*   API reference(s)
+*   best practice(s)
 *   batch(es)
+*   bazel macro(s)
+*   bazel test(ing)
 *   blog(s)
 *   browser
 *   build(s)
 *   callback(s)
 *   cluster(s)
 *   code-cell(s)
+*   commit
 *   committer(s)
 *   contributor(s)
+*   core(s)
 *   dataflow
 *   dataset
 *   deep learning
+*   default
+*   directory
+*   docstring(s)
 *   download
 *   dropout
+*   editor(s)
 *   email(s)
+*   filesystem(s)
+*   fork(s)
 *   gradient tape
+*   host
+*   inline
 *   issue(s)
 *   layer(s)
 *   log(s)
@@ -45,19 +60,33 @@ Alcune parole fanno parte di un vocabolario tecnico inglese e pertanto non hanno
 *   maintainer(s)
 *   merge(s)
 *   multicore
+*   multithread
+*   mutex
+*   namespace(s)
 *   notebook(s)
-*   overfit(ting)
+*   open source
+*   overfit/ting
 *   pattern(s)
+*   pipeline
 *   pixel(s)
+*   postsubmit(s)
+*   presubmit(s)
+*   placement
+*   plug-in(s)
+*   previewer(s)
 *   pull request(s)
+*   push
+*   release(s)
 *   repository(ies)
+*   script(s)
 *   skill(s)
+*   slash
 *   social media(s)
 *   tablet(s)
 *   test(s)
 *   training weight(s)
 *   tutorials(s)
-*   underfit(ting)
+*   underfit/ting
 *   unit test/ing(s)
 *   upload
 *   white paper(s)
